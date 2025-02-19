@@ -55,14 +55,15 @@ PICO_cluster_example <- PICO_cluster(data_PICO, p_begin=8, p_last=9, i_begin=10,
 #2.identifying overlaps
 # PICO_cluster: from the step two
 identify_overlappingMA <- function(PICO_cluster){
-  overlappingMA <- data.frame(matrix(ncol = 4, nrow = 0))
-  colnames(overlappingMA) <- c("Meta-analysis.ID","Meta_analysis","Author.(first.author’s.last.name)","Year.of.Publication")
+  overlappingMA <- data.frame(matrix(ncol = 5, nrow = 0))
+  colnames(overlappingMA) <- c("Meta-analysis.ID","Meta_analysis","Author.(first.author’s.last.name)","Year.of.Publication","PICO")
   for (i in c(1:length(PICO_cluster))) {
     data <- PICO_cluster[i]
-    data <- as.data.frame(data)
-    colnames(data) <- c("Meta-analysis.ID","Meta_analysis","Author.(first.author’s.last.name)","Year.of.Publication")
-    if (nrow(data) > 1 ) {
-      overlappingMA <- rbind (overlappingMA, data)
+    data_1 <- as.data.frame(data)
+    colnames(data_1) <- c("Meta-analysis.ID","Meta_analysis","Author.(first.author’s.last.name)","Year.of.Publication")
+    data_1$PICO <- names(data)
+    if (nrow(data_1) > 1 ) {
+      overlappingMA <- rbind (overlappingMA, data_1)
     }
   }
   return(overlappingMA)
@@ -138,57 +139,90 @@ opencm_example <- creat_citationmatrix_CCA(PICO_cluster_example, data_PICO, data
 #3.remove duplicates based on pre-defined rule
 # opencm: from step three2: citation matrix and pairwise CCA
 # data_PICO: from step one: standardized PICO of meta-analysis
-remove_overlappingMA <- function(opencm, data_PICO){
+# overlappingMA: from step two2:identifying overlaps
+opencm <- opencm_example
+i=2
+remove_overlappingMA <- function(opencm, data_PICO,overlappingMA){
   retain_nonoverlappingMA <- list()
   for (i in c(1:(length(opencm)/2))) {
-    opencm_CCA <- opencm_example[[2*2]]
-    opencm_CCA <- opencm[[i*2]]
-    opencm_CCA$"MA_compare_all" <- rownames(opencm_CCA)
-    opencm_CCA <- data.frame(separate_wider_delim(opencm_CCA[c(2:nrow(opencm_CCA)),], "MA_compare_all", "+", names = c("MA1","MA2")))
+    opencm_CCA_orig <- opencm[[i*2]]
+    opencm_CCA_orig$"MA_compare_all" <- rownames(opencm_CCA_orig)
+    opencm_CCA_orig <- opencm_CCA_orig[-1,]
+    opencm_CCA <- data.frame(separate_wider_delim(opencm_CCA_orig[c(1:nrow(opencm_CCA_orig)),], "MA_compare_all", "+", names = c("MA1","MA2")))
     opencm_CCA <- opencm_CCA[order(opencm_CCA[,1],decreasing = T), ]
-    process_overlappingMA <- data.frame(matrix(ncol = 3, nrow = 0))
-    colnames(process_overlappingMA) <- c("PICO", "retain_MA", "CCA")
-    for (j in c(1:nrow(opencm_CCA))) {
-      CCA <- opencm_CCA[j,1]
-      if (is.na(CCA) == FALSE) {
-        process_overlappingMA[nrow(process_overlappingMA)+1,"PICO"] <- colnames(opencm_CCA)[1]
-        if (CCA > 0.05) {
-          compare <- opencm_CCA[j,]
-          compare <- data_PICO[which(data_PICO$"Meta_analysis" == compare$MA1 | data_PICO$"Meta_analysis" == compare$MA2),c("Meta_analysis","Year.of.Publication","Number.of.included.primary.study")]
-          if (compare[1,"Year.of.Publication"] >= compare[2,"Year.of.Publication"] &
-              compare[1,"Number.of.included.primary.study"] >= compare[2,"Number.of.included.primary.study"]){
-            process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- compare[1,"Meta_analysis"]
-            process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- CCA
-            process_overlappingMA <- process_overlappingMA[process_overlappingMA$retain_MA != compare[2,"Meta_analysis"], ]
-          } else if (compare[1,"Year.of.Publication"] >= compare[2,"Year.of.Publication"] &
-                     compare[1,"Number.of.included.primary.study"] < compare[2,"Number.of.included.primary.study"]) {
-            process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- compare[1,"Meta_analysis"]
-            process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- CCA
-            process_overlappingMA <- process_overlappingMA[process_overlappingMA$retain_MA != compare[2,"Meta_analysis"], ]
-          } else {process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- compare[2,"Meta_analysis"]
-          process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- CCA
-          process_overlappingMA <- process_overlappingMA[process_overlappingMA$retain_MA != compare[1,"Meta_analysis"], ]}
-        } else if (CCA <= 0.05) {
-          process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- opencm_CCA[j,"MA1"]
-          process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- CCA
-          process_overlappingMA[nrow(process_overlappingMA)+1,"retain_MA"] <- opencm_CCA[j,"MA2"]
-          process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- CCA
-          process_overlappingMA[nrow(process_overlappingMA),"PICO"] <- colnames(opencm[[i*2]])
-        }
+    process_overlappingMA <- data.frame(matrix(ncol = 4, nrow = 0))
+    colnames(process_overlappingMA) <- c("PICO","Included MA", "retain_MA", "CCA")
+ 
+    if (opencm_CCA[1,1] <= 0.05 ) {
+      All_MA <- unique(c(opencm_CCA$MA1, opencm_CCA$MA2))
+      for (j in 1:length(All_MA)) {
+        MA <- All_MA[j]
+        process_overlappingMA[nrow(process_overlappingMA)+1,"PICO"] <- colnames(opencm_CCA_orig)[1]
+        process_overlappingMA[nrow(process_overlappingMA),"Included MA"] <- paste(overlappingMA[which(overlappingMA$PICO == colnames(opencm_CCA_orig)[1]),"Meta_analysis"], collapse = "; ")
+        process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- MA
+        process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA<=0.05"
       }
-      if (nrow(opencm_CCA) == 0) {
-        break
+    } else if (opencm_CCA[nrow(opencm_CCA),1] > 0.05){
+      
+      compareMA <- unique(c(opencm_CCA$MA1, opencm_CCA$MA2))
+      comparebasic <- subset(data_PICO[,c("Meta_analysis","Year.of.Publication","Number.of.included.primary.study")], data_PICO$"Meta_analysis" %in% compareMA)
+      comparebasic$Year.of.Publication <- as.numeric(comparebasic$Year.of.Publication)
+      comparebasic$Number.of.included.primary.study <- as.numeric(comparebasic$Number.of.included.primary.study)
+      retainMA <- subset(comparebasic, comparebasic$Year.of.Publication == max(comparebasic$Year.of.Publication))
+      if (nrow(retainMA) > 1) {
+        retainMA <- subset(retainMA, retainMA$Number.of.included.primary.study == max(retainMA$Number.of.included.primary.study))
+      }
+      for (j in 1:nrow(retainMA)) {
+        CCA_MA <- retainMA[j]
+        process_overlappingMA[nrow(process_overlappingMA)+1,"PICO"] <- colnames(opencm_CCA_orig)[1]
+        process_overlappingMA[nrow(process_overlappingMA),"Included MA"] <- paste(overlappingMA[which(overlappingMA$PICO == colnames(opencm_CCA_orig)[1]),"Meta_analysis"], collapse = "; ")
+        process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- CCA_MA
+        if (nrow(retainMA) > 1) {
+          process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA>0.05_same"
+        } else {process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA>0.05"}
+      }
+    } else {
+      
+      CCAhigh <- subset(opencm_CCA, opencm_CCA[1] >0.05)
+      compareCCAhigh <- unique(c(CCAhigh$MA1, CCAhigh$MA2))
+      
+      comparebasic <- subset(data_PICO[,c("Meta_analysis","Year.of.Publication","Number.of.included.primary.study")], data_PICO$"Meta_analysis" %in% compareCCAhigh)
+      comparebasic$Year.of.Publication <- as.numeric(comparebasic$Year.of.Publication)
+      comparebasic$Number.of.included.primary.study <- as.numeric(comparebasic$Number.of.included.primary.study)
+      retainMA <- subset(comparebasic, comparebasic$Year.of.Publication == max(comparebasic$Year.of.Publication))
+      if (nrow(retainMA) > 1) {
+        retainMA <- subset(retainMA, retainMA$Number.of.included.primary.study == max(retainMA$Number.of.included.primary.study))
+      }
+      CCAhigh_retain <-retainMA$Meta_analysis
+      for (j in 1:length(CCAhigh_retain)) {
+        CCAhigh_MA <- CCAhigh_retain[j]
+        process_overlappingMA[nrow(process_overlappingMA)+1,"PICO"] <- colnames(opencm_CCA_orig)[1]
+        process_overlappingMA[nrow(process_overlappingMA),"Included MA"] <- paste(overlappingMA[which(overlappingMA$PICO == colnames(opencm_CCA_orig)[1]),"Meta_analysis"], collapse = "; ")
+        process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- CCAhigh_MA
+        if (length(CCAhigh_retain) > 1) {
+          process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA>0.05_same"
+        } else {process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA>0.05"}
+      }
+
+      CCAlow <- subset(opencm_CCA, opencm_CCA[1] <=0.05)
+      CCAlow_includeretainMA <- subset(CCAlow[,c("MA1","MA2")], CCAlow$MA1 %in% CCAhigh_retain | CCAlow$MA2 %in% CCAhigh_retain)
+      CCAlow_includeretainMA <- unique(c(CCAlow$MA1, CCAlow$MA2))
+      CCAlow_includeretainMA <- CCAlow_includeretainMA[-which(CCAlow_includeretainMA == CCAhigh_retain)]
+      for (j in 1:length(CCAlow_includeretainMA)) {
+        CCAlow_MA <- CCAlow_includeretainMA[j]
+        process_overlappingMA[nrow(process_overlappingMA)+1,"PICO"] <- colnames(opencm_CCA_orig)[1]
+        process_overlappingMA[nrow(process_overlappingMA),"Included MA"] <- paste(overlappingMA[which(overlappingMA$PICO == colnames(opencm_CCA_orig)[1]),"Meta_analysis"], collapse = "; ")
+        process_overlappingMA[nrow(process_overlappingMA),"retain_MA"] <- CCAlow_MA
+        process_overlappingMA[nrow(process_overlappingMA),"CCA"] <- "CCA<=0.05"
       }
     }
+    
     retain_nonoverlappingMA <- c(retain_nonoverlappingMA, list(o = process_overlappingMA))
     names(retain_nonoverlappingMA)[length(retain_nonoverlappingMA)] <- colnames(opencm[[i*2]])
-    process_overlappingMA <- process_overlappingMA[!duplicated(process_overlappingMA["retain_MA"]),]
-    retain_nonoverlappingMA <- c(retain_nonoverlappingMA, list(o = process_overlappingMA))
-    names(retain_nonoverlappingMA)[length(retain_nonoverlappingMA)] <- paste(colnames(opencm[[i*2]]),"de",sep = "_")
   }
   return(retain_nonoverlappingMA)
 }
-remove_overlappingMA_example <- remove_overlappingMA(opencm_example, data_PICO)
+remove_overlappingMA_example <- remove_overlappingMA(opencm_example, data_PICO,overlappingMA_example)
 
 ##Phase one - Step four - constructing data location table----
 # PICO_cluster: from the step two:categorizing topic clusters and identifying overlaps
@@ -210,8 +244,8 @@ collect_needextractMA <- function(PICO_cluster, data_PICO, remove_overlappingMA)
   needextractMA <- data.frame(matrix(ncol = length(names(PICO_cluster)), nrow = nrow(data_PICO)))
   colnames(needextractMA) <- names(PICO_cluster)
   rownames(needextractMA) <- data_PICO$"Meta_analysis"
-  for (i in c(1:(length(remove_overlappingMA)/2))) {
-    retain_MA <- remove_overlappingMA[[i*2]]
+  for (i in 1:(length(remove_overlappingMA))) {
+    retain_MA <- remove_overlappingMA[[i]]
     for (j in c(1: nrow(retain_MA))) {
       need_MA <- retain_MA$retain_MA[j]
       for (k in c(1:nrow(needextractMA))){
@@ -312,8 +346,8 @@ collect_needextractMA_S_example <- collect_needextractMA_S(opencm_example, PICO_
 
 ##Phase one - outputting data location table----
 outputdata <- createWorkbook()
-addWorksheet(outputdata, "collect_needextractMA_example")
-writeData(outputdata, sheet = "MA_after_removing", pooleddata_collect_antibacterial, rowNames = TRUE)
-addWorksheet(outputdata, "collect_needextractMA_S_example")
-writeData(outputdata, sheet = "MA_before_removing", pooleddata_collect_antibacterial_all, rowNames = TRUE)
-saveWorkbook(outputdata, file = "collect_needextractMA", overwrite = TRUE)
+addWorksheet(outputdata, "MA_after_removing")
+writeData(outputdata, sheet = "MA_after_removing", collect_needextractMA_example, rowNames = TRUE)
+addWorksheet(outputdata, "MA_before_removing")
+writeData(outputdata, sheet = "MA_before_removing", collect_needextractMA_S_example, rowNames = TRUE)
+saveWorkbook(outputdata, file = "collect_needextractMA.xlsx", overwrite = TRUE)
