@@ -206,7 +206,7 @@ remove_overlappingMA <- function(opencm, data_PICO,overlappingMA){
 
       CCAlow <- subset(opencm_CCA, opencm_CCA[1] <=0.05)
       CCAlow_includeretainMA <- subset(CCAlow[,c("MA1","MA2")], CCAlow$MA1 %in% CCAhigh_retain | CCAlow$MA2 %in% CCAhigh_retain)
-      CCAlow_includeretainMA <- unique(c(CCAlow$MA1, CCAlow$MA2))
+      CCAlow_includeretainMA <- unique(c(CCAlow_includeretainMA$MA1, CCAlow_includeretainMA$MA2))
       CCAlow_includeretainMA <- CCAlow_includeretainMA[-which(CCAlow_includeretainMA == CCAhigh_retain)]
       for (j in 1:length(CCAlow_includeretainMA)) {
         CCAlow_MA <- CCAlow_includeretainMA[j]
